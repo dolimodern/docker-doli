@@ -1,0 +1,79 @@
+version: '2'
+
+
+volumes:
+  dolibarr_html:
+  dolibarr_docs:
+  dolibarr_scripts:
+  dolibarr_db:
+
+services:
+    dolimysql:
+        image: mysql:5.6
+        container_name: dolimysql
+        restart: always
+        command: --character_set_client=utf8 --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --character-set-client-handshake=FALSE
+        environment:
+            - "MYSQL_DATABASE=dolibarr"
+            - "MYSQL_USER=dolibarr"
+            - "MYSQL_PASSWORD=dolibarr"
+            - "MYSQL_ROOT_PASSWORD=root"
+        volumes:
+            - ./dolibarr_db:/var/lib/mysql
+
+    dolifpm:
+        image: monogramm/docker-dolibarr:9.0-alpine
+        container_name: dolifpm
+        restart: always
+        ports:
+            - "9000:9000"
+        depends_on:
+            - dolimysql
+        links:
+            - dolimysql
+        environment:
+            - "DOLI_DB_TYPE=mysql"
+            - "DOLI_DB_HOST=dolimysql" # same as mysql container name
+            - "DOLI_DB_PORT=3306"
+            - "DOLI_DB_NAME=dolibarr" # same as mysql mysql env name
+            - "DOLI_DB_USER=dolibarr" # same as mysql mysql env name
+            - "DOLI_DB_PASSWORD=dolibarr" # same as mysql mysql env name
+        volumes:
+            - dolibarr_html:/var/www/html
+            - dolibarr_docs:/var/www/documents
+            - dolibarr_scripts:/var/www/scripts
+
+    dolinginx:
+        image: nginx:1.15-alpine
+        container_name: dolinginx
+        restart: always
+        ports:
+            - 80:80
+            # - '443:443'
+        depends_on:
+            - dolifpm
+        links:
+            - dolifpm
+        environment:
+            - NGINX_HOST=doli.orig # set your local domain or your live domain
+            # - NGINX_CGI=dolifpm:9000 # same as dolibarr container name
+        volumes:
+            - ./nginx.conf:/etc/nginx/nginx.conf:ro
+            - dolibarr_html:/var/www/html
+            # If you need SSL connection, you can provide your own certificates
+            # - ./certs:/etc/letsencrypt
+            # - ./certs-data:/data/letsencrypt
+### phpMyAdmin ###########################################
+    phpmyadmin:
+        build: ./docker/phpmyadmin
+        environment:
+            - PMA_ARBITRARY=1
+            - MYSQL_USER=default
+            - MYSQL_PASSWORD=secret
+            - MYSQL_ROOT_PASSWORD=secret
+        ports:
+            - "8081:80"
+        depends_on:
+            - "dolimysql"
+        volumes:
+            - ./docker/phpmyadmin/themes/metro/:/var/www/html/themes/metro/
